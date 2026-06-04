@@ -1,0 +1,147 @@
+name: Release RPM package
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      release: ${{ steps.release.outputs.release }}
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Merge docker-aiv files
+      run: |
+        git clone https://github.com/aiv-code/docker-aiv --depth 1
+        rsync -av --ignore-existing --exclude='.git' docker-aiv/ ./
+        rm -rf docker-aiv
+
+    - name: Fetch all tags
+      run: git fetch --tags
+
+    - name: Parse Version from docker-compose.yml
+      id: version
+      run: |
+        # Extract the latest version from the docker-compose line "image: aivhub/aiv:6.3.8"
+        VERSION=$(cat docker-compose.yml | awk /'image: aivhub\/aiv:/ {print $2}' | cut -d':' -f2 | head -n1)
+        if [[ -z "$VERSION" ]]; then
+          echo "Error: Could not parse version from docker-compose.yml"
+          exit 1
+        fi
+        echo "Parsed version: $VERSION"
+        echo "VERSION=$VERSION" >> $GITHUB_ENV
+        echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+    - name: Determine Release Number
+      id: release
+      # if the tag already exists, get last release number and increment it. Example tags: `rpm/6.3.8-1`, `rpm/6.3.8-2`
+      env:
+        VERSION: ${{ env.VERSION }}
+      run: |
+        if git ls-remote --tags origin | grep -q "refs/tags/rpm/${VERSION}"; then
+          echo "Tag rpm/${VERSION}-* already exists. Finding the latest release number."
+          LATEST_RELEASE=$(git ls-remote --tags origin | grep "refs/tags/rpm/${VERSION}-" | sed "s/.*rpm\/${VERSION}-//" | sort -V | tail -n1)
+          if [[ -z "$LATEST_RELEASE" ]]; then
+            LATEST_RELEASE=0
+          fi
+          RELEASE=$((LATEST_RELEASE + 1))
+          echo "Incremented release number to $RELEASE"
+        else
+          echo "No existing tags found for version ${VERSION}. Setting release number to 0."
+          RELEASE=0
+        fi
+        echo "RELEASE=$RELEASE" >> $GITHUB_ENV
+        echo "RELEASE=$RELEASE" >> $GITHUB_OUTPUT
+        echo "Using release number: $RELEASE"
+
+    - name: Get run.jar from Docker image
+      env:
+        VERSION: ${{ env.VERSION }}
+      run: |
+        echo "Using image version: $VERSION"
+        docker pull aivhub/aiv:${VERSION}
+        docker create --name aiv_container aivhub/aiv:${VERSION}
+        docker cp aiv_container:/opt/run.jar aiv.jar
+        docker rm -f aiv_container
+
+    - name: Build RPM package
+      env:
+        VERSION: ${{ env.VERSION }}
+        RELEASE: ${{ env.RELEASE }}
+      run: |
+        echo "Building RPM package for version $VERSION"
+        docker run --rm -e "VERSION=$VERSION" -e "RELEASE=$RELEASE" \
+          -v $PWD:/workspace \
+          -w /workspace \
+          rockylinux:9 \
+          bash -c "
+            # Install required packages for RPM building
+            dnf install -y rpm-build rpm-devel rpmdevtools \
+                          java-17-openjdk-devel \
+                          gettext \
+                          tar gzip \
+                          systemd
+            
+            # Set up RPM build environment
+            rpmdev-setuptree
+            
+            # Run the build script
+            bash aiv-build-rpm.sh
+          "
+
+    - name: Upload RPM Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: rpm-files
+        path: aiv-${{ env.VERSION }}-${{ env.RELEASE }}.el9.noarch.rpm
+
+    - name: Create and Push Tag
+      env:
+        VERSION: ${{ env.VERSION }}
+        RELEASE: ${{ env.RELEASE }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        TAG_NAME=rpm/${VERSION}-${RELEASE}
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git tag ${TAG_NAME}
+        git push origin ${TAG_NAME}
+
+    - name: Release
+      uses: softprops/action-gh-release@v2
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        tag_name: rpm/${{ env.VERSION }}-${{ env.RELEASE }}
+        name: "RPM package ${{ env.VERSION }}-${{ env.RELEASE }}"
+        body: |
+          RPM package release for AIV version ${{ env.VERSION }}-${{ env.RELEASE }}
+
+          - Download aiv latest in https://github.com/aiv-code/docker-aiv/releases
+
+          - Install AIV
+          ```bash
+          sudo rpm -i aiv*.rpm
+          ```
+
+          - Start and enable the AIV service
+          ```bash
+          sudo systemctl enable --now aiv.service
+          ```
+
+          - Update AIV
+          ```
+          sudo rpm -U aiv*.rpm
+          ```
+
+        files: |
+          aiv*.rpm
