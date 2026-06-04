@@ -1,0 +1,26 @@
+{{- if and .Values.persistence.enabled .Values.persistence.storageClass.create }}
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: {{ .Values.persistence.storageClass.name }}
+  {{- if .Values.persistence.storageClass.annotations }}
+  annotations:
+    {{- toYaml .Values.persistence.storageClass.annotations | nindent 4 }}
+  {{- end }}
+  labels:
+    {{- include "aiv.labels" . | nindent 4 }}
+provisioner: {{ .Values.persistence.storageClass.provisioner }}
+{{- if .Values.persistence.storageClass.parameters }}
+parameters:
+  {{- toYaml .Values.persistence.storageClass.parameters | nindent 2 }}
+{{- end }}
+{{- if .Values.persistence.storageClass.reclaimPolicy }}
+reclaimPolicy: {{ .Values.persistence.storageClass.reclaimPolicy }}
+{{- end }}
+{{- if .Values.persistence.storageClass.mountOptions }}
+mountOptions:
+  {{- toYaml .Values.persistence.storageClass.mountOptions | nindent 2 }}
+{{- end }}
+volumeBindingMode: {{ .Values.persistence.storageClass.volumeBindingMode }}
+allowVolumeExpansion: {{ .Values.persistence.storageClass.allowVolumeExpansion }}
+{{- end }}

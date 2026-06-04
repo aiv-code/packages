@@ -1,0 +1,43 @@
+{{- if .Values.ai.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "aiv.fullname" . }}-ai
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "aiv.labels" . | nindent 4 }}
+    app: {{ include "aiv.fullname" . }}-ai
+spec:
+  replicas: {{ .Values.ai.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ include "aiv.fullname" . }}-ai
+  template:
+    metadata:
+      labels:
+        app: {{ include "aiv.fullname" . }}-ai
+        {{- include "aiv.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+      - name: {{ include "aiv.fullname" . }}-ai
+        image: {{ .Values.ai.image.repository }}:{{ .Values.ai.image.tag }}
+        imagePullPolicy: {{ .Values.ai.image.pullPolicy }}
+        ports:
+        - containerPort: {{ .Values.ai.containerPort }}
+        env:
+        {{- range $key, $value := .Values.ai.env }}
+        - name: {{ $key }}
+          value: {{ $value | quote }}
+        {{- end }}
+        {{- if .Values.ai.persistence.enabled }}
+        volumeMounts:
+          - name: storage
+            mountPath: {{ .Values.persistence.mountPath }}
+        {{- end }}
+      {{- if .Values.ai.persistence.enabled }}
+      volumes:
+        - name: storage
+          persistentVolumeClaim:
+            claimName: {{ include "aiv.fullname" . }}-pvc
+      {{- end }}
+{{- end }}

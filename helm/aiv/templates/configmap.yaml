@@ -1,0 +1,279 @@
+{{- if .Values.files }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "aiv.fullname" . }}-files
+  labels:
+{{ include "aiv.labels" . | indent 4 }}
+
+data:
+  application.yml: |-
+    server:
+      compression:
+        enabled: {{ .Values.application.server.compression.enabled }}
+        mime-types: application/json, text/html, text/xml, text/plain,text/css, text/javascript, application/javascript, application/octet-stream
+        min-response-size: 1024
+      servlet:
+        context-path: {{ .Values.application.server.contextPath }}
+      port: {{ .Values.application.server.port }}
+
+    spring:
+      autoconfigure:
+        exclude: org.springframework.boot.autoconfigure.mongo.MongoAutoConfiguration
+      resources:
+        static-locations: classpath:/static/,file://{{ .Values.application.storage.imgLocation }}
+      jackson:
+        serialization:
+          WRITE_DATES_AS_TIMESTAMPS: false
+        time-zone: UTC
+
+      {{- if .Values.postgresql.enabled }}
+      datasource:
+        url: {{ include "aiv.postgresql.url" . }}
+        username: {{ .Values.postgresql.username }}
+        password: {{ .Values.postgresql.password }}
+        driverClassName: org.postgresql.Driver
+
+      {{- if .Values.postgresql.datasource1.enabled }}
+      datasource1:
+        url: {{ include "aiv.postgresql.datasource1.url" . }}
+        username: {{ .Values.postgresql.username }}
+        password: {{ .Values.postgresql.password }}
+        driverClassName: org.postgresql.Driver
+      {{- end }}
+      {{- end }}
+
+      mvc:
+        pathmatch:
+          matching-strategy: ANT_PATH_MATCHER
+      jpa:
+        hibernate:
+          ddl-auto: update
+
+      liquibase:
+        aiv:
+          enabled: {{ .Values.application.liquibase.aiv.enabled }}
+          change-log: {{ .Values.application.liquibase.aiv.changeLog }}
+        security:
+          enabled: {{ .Values.application.liquibase.security.enabled }}
+          change-log: {{ .Values.application.liquibase.security.changeLog }}
+
+      {{- if .Values.kafka.enabled }}
+      kafka:
+        bootstrap-servers: {{ include "aiv.kafka.bootstrapServers" . }}
+        consumer:
+          group-id: {{ .Values.kafka.consumer.groupId }}
+          auto-offset-reset: {{ .Values.kafka.consumer.autoOffsetReset }}
+          key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+          value-deserializer: com.aiv.cluster.MapDeserializer
+        producer:
+          key-serializer: {{ .Values.kafka.producer.keySerializer }}
+          value-serializer: {{ .Values.kafka.producer.valueSerializer }}
+      {{- end }}
+
+    {{- if .Values.postgresql.jndi.enabled }}
+    datasources:
+      dslist[0]: '{{ include "aiv.postgresql.jndi.config" . }}'
+    {{- end }}
+
+    app:
+      slatKey: {{ include "aiv.slatKey" . }}
+      ivspec: {{ include "aiv.ivspec" . }}
+      imgLocation: {{ .Values.application.storage.imgLocation }}
+      appLocation: {{ .Values.application.storage.appLocation }}
+      repositoryLocation: {{ .Values.application.storage.repositoryLocation }}
+      logDir: {{ .Values.application.storage.logDir }}
+      deliveryLocation: {{ .Values.application.storage.deliveryLocation }}
+      database: postgresql
+      securityClass: {{ .Values.application.security.securityClass }}
+      isJira: {{ .Values.application.security.isJira }}
+      noofreports: 10
+      task:
+        kafka:
+          retention.ms: {{ .Values.application.task.kafka.retentionMs }}
+          topic:
+            topicName: {{ .Values.application.task.kafka.topic.name }}
+            partitions: {{ .Values.application.task.kafka.topic.partitions }}
+            replication-factor: {{ .Values.application.task.kafka.topic.replicationFactor }}
+        manager:
+          mode: {{ .Values.application.task.manager.mode }}
+
+    embed:
+      ekey: {{ include "aiv.embedEkey" . }}
+      tokenKey: {{ include "aiv.embedTokenKey" . }}
+      iscustomtoken: {{ .Values.application.embed.iscustomtoken }}
+
+    logging:
+      level:
+        liquibase: OFF
+
+    aiv-internalToken: {{ include "aiv.internalToken" . }}
+    management.metrics.mongo.command.enabled: false
+    management.metrics.mongo.connectionpool.enabled: false
+
+  logback.xml: |-
+{{ index .Values.files "logback.xml" | indent 4 }}
+{{- end }}
+
+{{- if .Values.driver_updater.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "aiv.fullname" . }}-scripts
+  labels:
+{{ include "aiv.labels" . | indent 4 }}
+
+data:
+  check_and_download_jars.sh: |-
+    #!/bin/bash
+
+    # Script to check and download required JAR files
+    # Author: DevOps Engineer
+    # Description: Verifies presence of JAR files and downloads missing ones from GitHub
+
+    set -euo pipefail  # Exit on error, undefined variables, and pipe failures
+
+    # Configuration
+    GITHUB_REPO="{{ .Values.driver_updater.githubRepo }}"
+    GITHUB_BRANCH="{{ .Values.driver_updater.githubBranch | default "main" }}"
+    BASE_URL="https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/config/drivers"
+
+    # Define required JAR files
+    declare -a REQUIRED_JARS=(
+{{- range .Values.driver_updater.drivers }}
+        "{{ . }}"
+{{- end }}
+    )
+
+    # Function to check if a command exists
+    command_exists() {
+        command -v "$1" >/dev/null 2>&1
+    }
+
+    # Function to download a file with retry logic
+    download_file() {
+        local filename=$1
+        local url=$2
+        local max_attempts=3
+        local attempt=1
+
+        while [ $attempt -le $max_attempts ]; do
+            echo "Attempt $attempt: Downloading $filename..."
+
+            if command_exists curl; then
+                if curl -L -o "$filename" "$url" --fail --silent --show-error; then
+                    echo "✓ Successfully downloaded $filename"
+                    return 0
+                fi
+            elif command_exists wget; then
+                if wget -O "$filename" "$url" --quiet; then
+                    echo "✓ Successfully downloaded $filename"
+                    return 0
+                fi
+            else
+                echo "✗ Error: Neither curl nor wget is available"
+                return 1
+            fi
+
+            echo "✗ Failed to download $filename (attempt $attempt/$max_attempts)"
+            ((attempt++))
+
+            if [ $attempt -le $max_attempts ]; then
+                sleep 2
+            fi
+        done
+
+        return 1
+    }
+
+    # Function to verify file integrity (basic check)
+    verify_jar_file() {
+        local filename=$1
+
+        if [ ! -f "$filename" ]; then
+            return 1
+        fi
+        return 0
+    }
+
+    # Main function
+    main() {
+        echo "=== JAR File Checker and Downloader ==="
+        echo "Checking for required JAR files..."
+
+        # cd to the directory $1
+
+        if [ $# -eq 1 ]; then
+            mkdir -p "$1"
+            cd "$1" || { echo "✗ Error: Cannot change to directory $1"; exit 1; }
+            echo "Changed directory to $(pwd)"
+        else
+            echo "Using current directory: $(pwd)"
+        fi
+
+        local missing_files=()
+        local existing_files=()
+
+        # Check which files are missing
+        for jar_file in "${REQUIRED_JARS[@]}"; do
+            if verify_jar_file "$jar_file"; then
+                existing_files+=("$jar_file")
+                echo "✓ Found: $jar_file"
+            else
+                missing_files+=("$jar_file")
+                echo "✗ Missing: $jar_file"
+            fi
+        done
+
+        # Report status
+        echo
+        echo "Found ${#existing_files[@]} of ${#REQUIRED_JARS[@]} required JAR files"
+
+        if [ ${#missing_files[@]} -eq 0 ]; then
+            echo "✓ All required JAR files are present!"
+            return 0
+        fi
+
+        echo "📥 Downloading ${#missing_files[@]} missing JAR files..."
+
+        # Download missing files
+        local download_success=0
+        local download_failed=0
+
+        for jar_file in "${missing_files[@]}"; do
+            local download_url="${BASE_URL}/${jar_file}"
+            echo
+            echo "Processing: $jar_file"
+
+            if download_file "$jar_file" "$download_url"; then
+                if verify_jar_file "$jar_file"; then
+                    download_success=$((download_success + 1))
+                else
+                    echo "✗ Downloaded file $jar_file failed verification"
+                    download_failed=$((download_failed + 1))
+                fi
+            else
+                echo "✗ Failed to download $jar_file"
+                download_failed=$((download_failed + 1))
+            fi
+        done
+
+        # Final report
+        echo
+        echo "=== Download Summary ==="
+        echo "✓ Successfully downloaded: $download_success"
+        if [ $download_failed -gt 0 ]; then
+            echo "✗ Failed downloads: $download_failed"
+            return 1
+        else
+            echo "✓ All downloads completed successfully!"
+            return 0
+        fi
+    }
+
+    # Run the script
+    main "$@"
+
+{{- end }}

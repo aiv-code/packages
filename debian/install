@@ -1,0 +1,7 @@
+aiv.jar var/lib/aiv/
+config/drivers/* var/lib/aiv/config/drivers/
+repository/econfig/* var/lib/aiv/repository/econfig/
+repository/Config/* var/lib/aiv/repository/Config/
+repository/images/* var/lib/aiv/repository/images/
+repository/Default/* var/lib/aiv/repository/Default
+debian/bin/aiv usr/bin/

@@ -1,0 +1,10 @@
+apiVersion: v2
+name: aiv
+description: An AIV helm chart for Kubernetes
+type: application
+
+# Versions are expected to follow Semantic Versioning (https://semver.org/)
+version: 0.2.0
+
+# This is the version number of the application being deployed.
+appVersion: "6.3.6"

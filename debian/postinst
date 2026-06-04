@@ -1,0 +1,16 @@
+#!/bin/sh
+set -e
+
+# Create user if it doesn't exist
+if ! id -u aiv > /dev/null 2>&1; then
+    adduser --system --group --no-create-home aiv
+fi
+
+ # Create required directories
+mkdir -p /var/log/aiv
+
+# Set proper ownership and permissions
+chown -R aiv:aiv /var/lib/aiv /var/log/aiv
+
+#DEBHELPER#
+exit 0

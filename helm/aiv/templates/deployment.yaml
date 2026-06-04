@@ -1,0 +1,179 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "aiv.fullname" . }}
+  labels:
+    {{- include "aiv.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "aiv.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+      {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+        checksum/configmap: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+      labels:
+        {{- include "aiv.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "aiv.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+
+
+      initContainers:
+        {{- if .Values.persistence.enabled }}
+        - name: setup-volume
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              # Create directory if it doesn't exist
+              mkdir -p /mnt/data
+
+              # Check if destination already has data
+              if [ "$(ls -A /mnt/data)" ]; then
+                echo "Data already exists in persistent volume at /opt/data. Skipping initialization."
+              else
+                echo "Persistent volume is empty. Initializing with default data..."
+                # Copy only if source directory has data
+                if [ "$(ls -A /opt)" ]; then
+                  echo "Copying default data to persistent volume..."
+                  cp -R /opt/* /mnt/data/
+                  echo "Data initialization complete."
+                else
+                  echo "No data to copy from /opt."
+                fi
+              fi
+          volumeMounts:
+          - name: storage
+            mountPath: /mnt/data
+          {{- end }}
+        {{- if .Values.driver_updater.enabled }}
+        - name: driver-updater
+          image: "{{ .Values.driver_updater.image.repository }}:{{ .Values.driver_updater.image.tag }}"
+          imagePullPolicy: {{ .Values.driver_updater.image.pullPolicy | default "IfNotPresent" }}
+          command: ["/bin/bash", "/scripts/check_and_download_jars.sh", "{{ .Values.driver_updater.path }}"]
+          volumeMounts:
+          - name: scripts
+            mountPath: /scripts
+            readOnly: true
+          {{- if .Values.persistence.enabled }}
+          - name: storage
+            mountPath: {{ .Values.persistence.mountPath }}
+          {{- else if .Values.driver_updater.enabled }}
+          - name: storage
+            mountPath: {{ .Values.driver_updater.path }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.driver_updater.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.driver_updater.securityContext | nindent 12 }}
+      {{- end }}
+
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          {{- if .Values.command }}
+          command:
+            {{- toYaml .Values.command | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          {{- if or .Values.envs .Values.env }}
+          env:
+            # Custom environment variables from values.envs
+            {{- range $key, $val := .Values.envs }}
+            - name: {{ $key }}
+            {{- if and $val (kindIs "slice" $val) }}
+              {{- $val | toYaml | nindent 14 }}
+            {{- else if and  $val (kindIs "map" $val) }}
+              {{- toYaml $val | nindent 14 }}
+            {{- else if and $val (kindIs "float64" $val) }}
+              value: {{ $val }}
+            {{- else }}
+              value: {{ $val | quote }}
+            {{- end }}
+            {{- end }}
+          {{- if .Values.env }}
+          envFrom:
+            - secretRef:
+                name: {{ include "aiv.fullname" . }}-business-env
+          {{- end }}
+          {{- end }}
+          volumeMounts:
+            {{- if .Values.volumeMounts }}
+            {{- include "common.tplvalues.render" ( dict "value" .Values.volumeMounts "context" $ ) | nindent 10 }}
+            {{- end }}
+            {{- if .Values.persistence.enabled }}
+          - name: storage
+            mountPath: {{ .Values.persistence.mountPath }}
+            {{- else if .Values.driver_updater.enabled }}
+          - name: storage
+            mountPath: {{ .Values.driver_updater.path }}
+            {{- end }}
+      volumes:
+        {{- if .Values.files }}
+        - name: files
+          configMap:
+            name: {{ include "aiv.fullname" . }}-files
+        {{- end }}
+
+        {{- if .Values.driver_updater.enabled }}
+        - name: scripts
+          configMap:
+            name: {{ include "aiv.fullname" . }}-scripts
+            defaultMode: 0755
+            items:
+              - key: check_and_download_jars.sh
+                path: check_and_download_jars.sh
+        {{- end }}
+
+        {{- if .Values.base64_files }}
+        - name: base64_files
+          secret:
+            secretName: {{ include "aiv.fullname" . }}-secret-files
+        {{- end }}
+
+        {{- if .Values.persistence.enabled }}
+        - name: storage
+          persistentVolumeClaim:
+            claimName: {{ include "aiv.fullname" . }}-pvc
+        {{- else if .Values.driver_updater.enabled }}
+        - name: storage
+          emptyDir: {}
+        {{- end }}
+
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

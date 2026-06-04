@@ -1,0 +1,14 @@
+Source: aiv
+Section: java
+Priority: optional
+Maintainer: Bot Action <bot@aivhub.com>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: 4.5.1
+Homepage: https://aivhub.com
+
+Package: aiv
+Architecture: all
+Depends: ${misc:Depends}, default-jdk-headless | openjdk-21-jdk-headless | openjdk-17-jdk-headless | openjdk-11-jdk-headless, ca-certificates
+Description: AIV Spring Application
+ Java Spring application for AIV system.
+ This package includes the necessary components to run the AIV service.
