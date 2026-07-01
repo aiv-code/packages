@@ -15,11 +15,79 @@ permissions:
   packages: write
 
 jobs:
-  build:
-    runs-on: windows-latest
+  extract-jar:
+    runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.VERSION }}
       release: ${{ steps.release.outputs.RELEASE }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Merge docker-aiv files
+        run: |
+          git clone https://github.com/aiv-code/docker-aiv --depth 1
+          rsync -av --ignore-existing --exclude='.git' docker-aiv/ ./
+          rm -rf docker-aiv
+
+      - name: Fetch all tags
+        run: git fetch --tags
+
+      - name: Parse Version from docker-compose.yml
+        id: version
+        run: |
+          VERSION=$(awk '/image: aivhub\/aiv:/ {print $2}' docker-compose.yml | cut -d':' -f2 | head -n1)
+          if [[ -z "$VERSION" ]]; then
+            echo "Error: Could not parse version from docker-compose.yml"
+            exit 1
+          fi
+          echo "Parsed version: $VERSION"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Determine Release Number
+        id: release
+        env:
+          VERSION: ${{ env.VERSION }}
+        run: |
+          if git ls-remote --tags origin | grep -q "refs/tags/win/${VERSION}"; then
+            echo "Tag win/${VERSION}-* already exists. Finding latest release number."
+            LATEST_RELEASE=$(git ls-remote --tags origin | grep "refs/tags/win/${VERSION}-" \
+              | sed "s/.*win\/${VERSION}-//" | sort -V | tail -n1)
+            [[ -z "$LATEST_RELEASE" ]] && LATEST_RELEASE=0
+            RELEASE=$((LATEST_RELEASE + 1))
+            echo "Incremented release number to $RELEASE"
+          else
+            echo "No existing tags found for version ${VERSION}. Setting release number to 0."
+            RELEASE=0
+          fi
+          echo "RELEASE=$RELEASE" >> $GITHUB_ENV
+          echo "RELEASE=$RELEASE" >> $GITHUB_OUTPUT
+          echo "Using release number: $RELEASE"
+
+      - name: Get aiv.jar from Docker image
+        env:
+          VERSION: ${{ env.VERSION }}
+        run: |
+          echo "Pulling aivhub/aiv:${VERSION}"
+          docker pull aivhub/aiv:${VERSION}
+          docker create --name aiv_container aivhub/aiv:${VERSION}
+          docker cp aiv_container:/opt/run.jar aiv.jar
+          docker rm -f aiv_container
+
+      - name: Upload aiv.jar artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aiv-jar
+          path: aiv.jar
+          retention-days: 1
+
+  build:
+    runs-on: windows-latest
+    needs: extract-jar
+    env:
+      VERSION: ${{ needs.extract-jar.outputs.version }}
+      RELEASE: ${{ needs.extract-jar.outputs.release }}
 
     steps:
       - uses: actions/checkout@v4
@@ -41,42 +109,10 @@ jobs:
             }
           Remove-Item -Recurse -Force docker-aiv
 
-      - name: Fetch all tags
-        run: git fetch --tags
-
-      - name: Parse Version from docker-compose.yml
-        id: version
-        shell: bash
-        run: |
-          VERSION=$(awk '/image: aivhub\/aiv:/ {print $2}' docker-compose.yml | cut -d':' -f2 | head -n1)
-          if [[ -z "$VERSION" ]]; then
-            echo "Error: Could not parse version from docker-compose.yml"
-            exit 1
-          fi
-          echo "Parsed version: $VERSION"
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Determine Release Number
-        id: release
-        shell: bash
-        env:
-          VERSION: ${{ env.VERSION }}
-        run: |
-          if git ls-remote --tags origin | grep -q "refs/tags/win/${VERSION}"; then
-            echo "Tag win/${VERSION}-* already exists. Finding latest release number."
-            LATEST_RELEASE=$(git ls-remote --tags origin | grep "refs/tags/win/${VERSION}-" \
-              | sed "s/.*win\/${VERSION}-//" | sort -V | tail -n1)
-            [[ -z "$LATEST_RELEASE" ]] && LATEST_RELEASE=0
-            RELEASE=$((LATEST_RELEASE + 1))
-            echo "Incremented release number to $RELEASE"
-          else
-            echo "No existing tags found for version ${VERSION}. Setting release number to 0."
-            RELEASE=0
-          fi
-          echo "RELEASE=$RELEASE" >> $GITHUB_ENV
-          echo "RELEASE=$RELEASE" >> $GITHUB_OUTPUT
-          echo "Using release number: $RELEASE"
+      - name: Download aiv.jar artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: aiv-jar
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -93,22 +129,8 @@ jobs:
           wix eula accept wix7
           wix extension add WixToolset.Util.wixext
 
-      - name: Get aiv.jar from Docker image
-        shell: bash
-        env:
-          VERSION: ${{ env.VERSION }}
-        run: |
-          echo "Pulling aivhub/aiv:${VERSION}"
-          docker pull aivhub/aiv:${VERSION}
-          docker create --name aiv_container aivhub/aiv:${VERSION}
-          docker cp aiv_container:/opt/run.jar aiv.jar
-          docker rm -f aiv_container
-
       - name: Build Windows MSI
         shell: pwsh
-        env:
-          VERSION: ${{ env.VERSION }}
-          RELEASE: ${{ env.RELEASE }}
         run: |
           .\aiv-build-win.ps1 -Version $env:VERSION -Release $env:RELEASE
 
@@ -121,8 +143,6 @@ jobs:
       - name: Create and Push Tag
         shell: bash
         env:
-          VERSION: ${{ env.VERSION }}
-          RELEASE: ${{ env.RELEASE }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG_NAME=win/${VERSION}-${RELEASE}
