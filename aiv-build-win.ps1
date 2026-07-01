@@ -78,8 +78,7 @@ $appYml | Set-Content "$BuildDir\repository\econfig\application.yml"
 # by seeding from version string.
 $wxs = @"
 <?xml version="1.0" encoding="UTF-8"?>
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
-     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
 
   <Package Name="AIV"
            Manufacturer="AIVHub"
@@ -93,13 +92,14 @@ $wxs = @"
     <MediaTemplate EmbedCab="yes" />
 
     <!-- Java 17+ prerequisite check -->
-    <util:RegistrySearch Id="JavaHomeSearch"
-                         Root="HKLM"
-                         Key="SOFTWARE\JavaSoft\JDK"
-                         Value="CurrentVersion"
-                         Variable="JavaVersion"
-                         Result="value" />
-    <Launch Condition="JavaVersion" Message="Java 17 (or later) must be installed before AIV." />
+    <Property Id="JAVACURRENTVERSION">
+      <RegistrySearch Id="JavaVersionSearch"
+                      Root="HKLM"
+                      Key="SOFTWARE\JavaSoft\JDK"
+                      Name="CurrentVersion"
+                      Type="raw" />
+    </Property>
+    <Launch Condition="JAVACURRENTVERSION" Message="Java 17 (or later) must be installed before AIV." />
 
     <Feature Id="MainFeature" Title="AIV Application" Level="1">
       <ComponentGroupRef Id="AIVFiles" />
@@ -125,13 +125,6 @@ $wxs = @"
     <!-- Windows Service registration via WiX ServiceInstall -->
     <Component Id="AIVService" Directory="INSTALLFOLDER" Guid="*">
       <File Id="AivBatSvc" Source="$BuildDir\bin\aiv.bat" />
-      <util:ServiceConfig ServiceName="AIVService"
-                          Account="LocalSystem"
-                          Arguments=""
-                          ErrorControl="normal"
-                          Start="auto"
-                          Type="ownProcess"
-                          Description="AIV Application Service" />
       <ServiceInstall Id="InstallAIVService"
                       Name="AIVService"
                       DisplayName="AIV Application"
@@ -168,7 +161,6 @@ $wxs | Set-Content "$BuildDir\aiv.wxs"
 # ── Build MSI ─────────────────────────────────────────────────────────────────
 Write-Host "Running WiX build..."
 wix build "$BuildDir\aiv.wxs" `
-    -ext WixToolset.Util.wixext `
     -o "aiv-$Version-$Release.msi"
 
 Write-Host "MSI built successfully:"
