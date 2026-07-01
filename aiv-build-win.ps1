@@ -143,14 +143,19 @@ $wxs = @"
 
     <!-- Add INSTALLFOLDER\bin to system PATH -->
     <Component Id="AIVEnvPath" Directory="INSTALLFOLDER" Guid="C9D3E4F5-A6B7-8901-CDEF-123456789012">
+      <RegistryValue Root="HKLM"
+                     Key="SOFTWARE\AIVHub\AIV"
+                     Name="PathConfigured"
+                     Type="integer"
+                     Value="1"
+                     KeyPath="yes" />
       <Environment Id="AIVPath"
                    Name="PATH"
                    Value="[INSTALLFOLDER]bin"
                    Permanent="no"
                    Part="last"
                    Action="set"
-                   System="yes"
-                   KeyPath="yes" />
+                   System="yes" />
     </Component>
 
   </Package>
