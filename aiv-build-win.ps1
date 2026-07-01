@@ -167,7 +167,7 @@ $wxs | Set-Content "$BuildDir\aiv.wxs"
 
 # ── Build MSI ─────────────────────────────────────────────────────────────────
 Write-Host "Running WiX build..."
-dotnet tool run wix build "$BuildDir\aiv.wxs" `
+wix build "$BuildDir\aiv.wxs" `
     -ext WixToolset.Util.wixext `
     -o "aiv-$Version-$Release.msi"
 
