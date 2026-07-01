@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - win
   repository_dispatch:
     types: [docker-aiv-release]
 
