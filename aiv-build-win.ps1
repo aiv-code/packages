@@ -123,8 +123,13 @@ $wxs = @"
     </ComponentGroup>
 
     <!-- Windows Service registration via WiX ServiceInstall -->
-    <Component Id="AIVService" Directory="INSTALLFOLDER" Guid="*">
-      <File Id="AivBatSvc" Source="$BuildDir\bin\aiv.bat" />
+    <Component Id="AIVService" Directory="INSTALLFOLDER" Guid="D1E2F3A4-B5C6-7890-DEFA-234567890123">
+      <RegistryValue Root="HKLM"
+                     Key="SOFTWARE\AIVHub\AIV"
+                     Name="ServiceInstalled"
+                     Type="integer"
+                     Value="1"
+                     KeyPath="yes" />
       <ServiceInstall Id="InstallAIVService"
                       Name="AIVService"
                       DisplayName="AIV Application"
