@@ -90,8 +90,8 @@ jobs:
           WIX_ACCEPT_OSMF_EULA: "1"
         run: |
           dotnet tool install --global wix
-          # Accept EULA explicitly for WiX v7
-          $env:WIX_ACCEPT_OSMF_EULA = "1" & wix extension add WixToolset.Util.wixext
+          wix eula accept wix7
+          wix extension add WixToolset.Util.wixext
 
       - name: Get aiv.jar from Docker image
         shell: bash
