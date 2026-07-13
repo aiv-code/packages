@@ -1,0 +1,17 @@
+#!/bin/bash
+# Resolve a JDK via java_home (works whether Java was installed via the
+# official pkg, Homebrew, or Adoptium — none of which reliably symlink
+# into /usr/bin/java on macOS).
+if [ -x /usr/libexec/java_home ]; then
+  JAVA_HOME="$(/usr/libexec/java_home -v 17+ 2>/dev/null || /usr/libexec/java_home 2>/dev/null)"
+fi
+JAVA_BIN="${JAVA_HOME:+$JAVA_HOME/bin/}java"
+
+exec "$JAVA_BIN" --add-opens=java.base/java.nio=ALL-UNNAMED \
+     --add-exports=java.base/sun.nio.ch=ALL-UNNAMED \
+     --add-opens=java.base/sun.nio.ch=ALL-UNNAMED \
+     --add-opens=java.base/sun.util.calendar=ALL-UNNAMED \
+     -Dspring.config.location=/usr/local/lib/aiv/repository/econfig/application.yml \
+     -Dloader.path=/usr/local/lib/aiv/config/drivers \
+     -cp /usr/local/lib/aiv/repository/econfig/:/usr/local/lib/aiv/aiv.jar \
+     org.springframework.boot.loader.launch.PropertiesLauncher

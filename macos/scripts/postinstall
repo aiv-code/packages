@@ -1,0 +1,33 @@
+#!/bin/bash
+# pkgbuild postinstall — runs as root after files are laid down.
+set -e
+
+# Create the dedicated service account (equivalent of the `aiv` system
+# user created by the deb/rpm postinst) if it doesn't already exist.
+if ! dscl . -read /Users/_aiv >/dev/null 2>&1; then
+  LAST_UID=$(dscl . -list /Users UniqueID | awk '{print $2}' | sort -n | tail -1)
+  NEW_UID=$((LAST_UID + 1))
+  if [ "$NEW_UID" -lt 200 ]; then
+    NEW_UID=200
+  fi
+  dscl . -create /Users/_aiv
+  dscl . -create /Users/_aiv UserShell /usr/bin/false
+  dscl . -create /Users/_aiv RealName "AIV Service"
+  dscl . -create /Users/_aiv UniqueID "$NEW_UID"
+  dscl . -create /Users/_aiv PrimaryGroupID 20
+  dscl . -create /Users/_aiv IsHidden 1
+fi
+
+mkdir -p /usr/local/var/log/aiv
+chown -R _aiv:staff /usr/local/lib/aiv /usr/local/var/log/aiv
+chmod 755 /usr/local/bin/aiv /usr/local/bin/aiv-uninstall.sh
+
+PLIST=/Library/LaunchDaemons/com.aivhub.aiv.plist
+chown root:wheel "$PLIST"
+chmod 644 "$PLIST"
+
+# Reload the job if it was already running (upgrade path), then start it.
+launchctl bootout system "$PLIST" 2>/dev/null || launchctl unload -w "$PLIST" 2>/dev/null || true
+launchctl bootstrap system "$PLIST" 2>/dev/null || launchctl load -w "$PLIST"
+
+exit 0

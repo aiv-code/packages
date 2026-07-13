@@ -1,0 +1,165 @@
+name: Release macOS package
+
+on:
+  push:
+    branches:
+      - main
+  repository_dispatch:
+    types: [docker-aiv-release]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+  packages: write
+
+jobs:
+  extract-jar:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.VERSION }}
+      release: ${{ steps.release.outputs.RELEASE }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Merge docker-aiv files
+        run: |
+          git clone https://github.com/aiv-code/docker-aiv --depth 1
+          rsync -av --ignore-existing --exclude='.git' docker-aiv/ ./
+          rm -rf docker-aiv
+
+      - name: Fetch all tags
+        run: git fetch --tags
+
+      - name: Parse Version from docker-compose.yml
+        id: version
+        run: |
+          VERSION=$(awk '/image: aivhub\/aiv:/ {print $2}' docker-compose.yml | cut -d':' -f2 | head -n1)
+          if [[ -z "$VERSION" ]]; then
+            echo "Error: Could not parse version from docker-compose.yml"
+            exit 1
+          fi
+          echo "Parsed version: $VERSION"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Determine Release Number
+        id: release
+        # if the tag already exists, get last release number and increment it. Example tags: `macos/6.3.8-1`, `macos/6.3.8-2`
+        env:
+          VERSION: ${{ env.VERSION }}
+        run: |
+          if git ls-remote --tags origin | grep -q "refs/tags/macos/${VERSION}"; then
+            echo "Tag macos/${VERSION}-* already exists. Finding latest release number."
+            LATEST_RELEASE=$(git ls-remote --tags origin | grep "refs/tags/macos/${VERSION}-" \
+              | sed "s/.*macos\/${VERSION}-//" | sort -V | tail -n1)
+            [[ -z "$LATEST_RELEASE" ]] && LATEST_RELEASE=0
+            RELEASE=$((LATEST_RELEASE + 1))
+            echo "Incremented release number to $RELEASE"
+          else
+            echo "No existing tags found for version ${VERSION}. Setting release number to 0."
+            RELEASE=0
+          fi
+          echo "RELEASE=$RELEASE" >> $GITHUB_ENV
+          echo "RELEASE=$RELEASE" >> $GITHUB_OUTPUT
+          echo "Using release number: $RELEASE"
+
+      - name: Get aiv.jar from Docker image
+        env:
+          VERSION: ${{ env.VERSION }}
+        run: |
+          echo "Pulling aivhub/aiv:${VERSION}"
+          docker pull aivhub/aiv:${VERSION}
+          docker create --name aiv_container aivhub/aiv:${VERSION}
+          docker cp aiv_container:/opt/run.jar aiv.jar
+          docker rm -f aiv_container
+
+      - name: Upload aiv.jar artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aiv-jar
+          path: aiv.jar
+          retention-days: 1
+
+  build:
+    runs-on: macos-latest
+    needs: extract-jar
+    env:
+      VERSION: ${{ needs.extract-jar.outputs.version }}
+      RELEASE: ${{ needs.extract-jar.outputs.release }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Merge docker-aiv files
+        run: |
+          git clone https://github.com/aiv-code/docker-aiv --depth 1
+          rsync -av --ignore-existing --exclude='.git' docker-aiv/ ./
+          rm -rf docker-aiv
+
+      - name: Download aiv.jar artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: aiv-jar
+
+      - name: Install build dependencies
+        run: |
+          brew install gettext
+          brew link --force gettext
+
+      - name: Build macOS package
+        run: |
+          chmod +x aiv-build-macos.sh
+          ./aiv-build-macos.sh
+
+      - name: Upload PKG Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-pkg
+          path: aiv-${{ env.VERSION }}-${{ env.RELEASE }}.pkg
+
+      - name: Create and Push Tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG_NAME=macos/${VERSION}-${RELEASE}
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag ${TAG_NAME}
+          git push origin ${TAG_NAME}
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: macos/${{ env.VERSION }}-${{ env.RELEASE }}
+          name: "macOS package ${{ env.VERSION }}-${{ env.RELEASE }}"
+          body: |
+            macOS package release for AIV version ${{ env.VERSION }}-${{ env.RELEASE }}
+
+            - Download aiv latest at https://github.com/aiv-code/docker-aiv/releases
+
+            **Requirements:** Java 17 or later must be installed before starting the service.
+
+            **Note:** this package is unsigned. On first install, right-click (or Control-click)
+            the .pkg and choose "Open", or allow it via System Settings > Privacy & Security.
+
+            ### Install AIV
+            ```bash
+            sudo installer -pkg aiv-${{ env.VERSION }}-${{ env.RELEASE }}.pkg -target /
+            ```
+            The AIV service (`com.aivhub.aiv`) starts automatically after installation via launchd.
+
+            ### Upgrade AIV
+            ```bash
+            sudo installer -pkg aiv-${{ env.VERSION }}-${{ env.RELEASE }}.pkg -target /
+            ```
+
+            ### Uninstall AIV
+            ```bash
+            sudo /usr/local/bin/aiv-uninstall.sh
+            ```
+
+          files: |
+            aiv-${{ env.VERSION }}-${{ env.RELEASE }}.pkg
