@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - win
   repository_dispatch:
     types: [docker-aiv-release]
 
@@ -161,7 +162,10 @@ jobs:
 
             - Download the latest MSI at https://github.com/aiv-code/docker-aiv/releases
 
-            **Requirements:** Java 17 or later must be installed before running the installer.
+            **Requirements:** Java 17 or later must be installed and available on PATH. The
+            installer no longer verifies this at install time (the check was Oracle-JDK-specific
+            and rejected other valid JDKs such as Eclipse Temurin); `aiv.bat` now checks the Java
+            version at startup instead. Run `java -version` to confirm before installing.
 
             ### Install AIV
             ```powershell

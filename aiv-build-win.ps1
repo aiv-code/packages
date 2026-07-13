@@ -39,6 +39,22 @@ Copy-Item -Recurse repository\Default\*   "$BuildDir\repository\Default\"
 # ── aiv.bat launcher ─────────────────────────────────────────────────────────
 @"
 @echo off
+where java >nul 2>nul
+if errorlevel 1 (
+    echo ERROR: Java was not found on PATH. Please install Java 17 or later before running AIV.
+    exit /b 1
+)
+for /f "tokens=3" %%v in ('java -version 2^>^&1 ^| findstr /i "version"') do set JAVA_VER_RAW=%%v
+set JAVA_VER_RAW=%JAVA_VER_RAW:"=%
+for /f "tokens=1,2 delims=." %%a in ("%JAVA_VER_RAW%") do (
+    set JAVA_MAJOR=%%a
+    set JAVA_MINOR=%%b
+)
+if "%JAVA_MAJOR%"=="1" set JAVA_MAJOR=%JAVA_MINOR%
+if %JAVA_MAJOR% LSS 17 (
+    echo ERROR: AIV requires Java 17 or later. Detected version %JAVA_VER_RAW%.
+    exit /b 1
+)
 java --add-opens=java.base/java.nio=ALL-UNNAMED ^
      --add-exports=java.base/sun.nio.ch=ALL-UNNAMED ^
      --add-opens=java.base/sun.nio.ch=ALL-UNNAMED ^
@@ -91,15 +107,10 @@ $wxs = @"
     <MajorUpgrade DowngradeErrorMessage="A newer version of AIV is already installed." />
     <MediaTemplate EmbedCab="yes" />
 
-    <!-- Java 17+ prerequisite check -->
-    <Property Id="JAVACURRENTVERSION">
-      <RegistrySearch Id="JavaVersionSearch"
-                      Root="HKLM"
-                      Key="SOFTWARE\JavaSoft\JDK"
-                      Name="CurrentVersion"
-                      Type="raw" />
-    </Property>
-    <Launch Condition="JAVACURRENTVERSION" Message="Java 17 (or later) must be installed before AIV." />
+    <!-- Java 17+ is required, but is checked at runtime by aiv.bat rather than as an
+         MSI Launch Condition: registry-based detection is vendor-specific (Oracle's
+         JavaSoft\JDK\CurrentVersion key is not set by default by Temurin/Adoptium and
+         other vendors), which caused false "Java not installed" blocks on valid JDKs. -->
 
     <Feature Id="MainFeature" Title="AIV Application" Level="1">
       <ComponentGroupRef Id="AIVFiles" />
