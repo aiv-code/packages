@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - macos
   repository_dispatch:
     types: [docker-aiv-release]
 
