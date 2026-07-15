@@ -36,7 +36,19 @@ Copy-Item -Recurse repository\Config\*    "$BuildDir\repository\Config\"
 Copy-Item -Recurse repository\images\*    "$BuildDir\repository\images\"
 Copy-Item -Recurse repository\Default\*   "$BuildDir\repository\Default\"
 
-# ── aiv.bat launcher ─────────────────────────────────────────────────────────
+# ── Shared java invocation args (used by both aiv.bat and the WinSW service config) ────
+$JavaArgs = @(
+    "--add-opens=java.base/java.nio=ALL-UNNAMED"
+    "--add-exports=java.base/sun.nio.ch=ALL-UNNAMED"
+    "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED"
+    "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED"
+    "-Dspring.config.location=$InstallBase\repository\econfig\application.yml"
+    "-Dloader.path=$InstallBase\config\drivers"
+    "-cp `"$InstallBase\repository\econfig\;$InstallBase\aiv.jar`""
+    "org.springframework.boot.loader.launch.PropertiesLauncher"
+) -join " "
+
+# ── aiv.bat launcher (interactive/manual use) ──────────────────────────────────
 @"
 @echo off
 where java >nul 2>nul
@@ -55,15 +67,32 @@ if %JAVA_MAJOR% LSS 17 (
     echo ERROR: AIV requires Java 17 or later. Detected version %JAVA_VER_RAW%.
     exit /b 1
 )
-java --add-opens=java.base/java.nio=ALL-UNNAMED ^
-     --add-exports=java.base/sun.nio.ch=ALL-UNNAMED ^
-     --add-opens=java.base/sun.nio.ch=ALL-UNNAMED ^
-     --add-opens=java.base/sun.util.calendar=ALL-UNNAMED ^
-     -Dspring.config.location=$InstallBase\repository\econfig\application.yml ^
-     -Dloader.path=$InstallBase\config\drivers ^
-     -cp "$InstallBase\repository\econfig\;$InstallBase\aiv.jar" ^
-     org.springframework.boot.loader.launch.PropertiesLauncher
+java $JavaArgs
 "@ | Set-Content "$BuildDir\bin\aiv.bat"
+
+# ── AIVService.exe (WinSW) ──────────────────────────────────────────────────────
+# The Windows Service Control Manager requires a service binary that implements the
+# SCM control protocol (StartServiceCtrlDispatcher); a bare java.exe/aiv.bat process
+# does not, so it can never be registered directly as an ownProcess service. WinSW is
+# a small wrapper exe that does implement that protocol and proxies to a child process
+# described by the paired <name>.xml config placed next to it.
+$WinswUrl = "https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW-x64.exe"
+Invoke-WebRequest -Uri $WinswUrl -OutFile "$BuildDir\bin\AIVService.exe"
+
+@"
+<service>
+  <id>AIVService</id>
+  <name>AIV Application</name>
+  <description>AIV Application Service</description>
+  <executable>java</executable>
+  <arguments>$JavaArgs</arguments>
+  <workingdirectory>$InstallBase</workingdirectory>
+  <log mode="roll-by-size">
+    <logpath>$InstallBase\logs</logpath>
+  </log>
+  <onfailure action="restart" delay="10 sec" />
+</service>
+"@ | Set-Content "$BuildDir\bin\AIVService.xml"
 
 # ── Substitute config defaults ────────────────────────────────────────────────
 $env:aiv_base            = $InstallBase
@@ -119,7 +148,9 @@ $wxs = @"
     </Feature>
 
     <StandardDirectory Id="ProgramFiles64Folder">
-      <Directory Id="INSTALLFOLDER" Name="AIV" />
+      <Directory Id="INSTALLFOLDER" Name="AIV">
+        <Directory Id="INSTALLBIN" Name="bin" />
+      </Directory>
     </StandardDirectory>
 
     <ComponentGroup Id="AIVFiles" Directory="INSTALLFOLDER">
@@ -128,19 +159,17 @@ $wxs = @"
       <Component Id="AivJar" Guid="*">
         <File Source="$BuildDir\aiv.jar" KeyPath="yes" />
       </Component>
-      <Component Id="AivBat" Guid="*">
-        <File Source="$BuildDir\bin\aiv.bat" />
+      <Component Id="AivBat" Directory="INSTALLBIN" Guid="*">
+        <File Source="$BuildDir\bin\aiv.bat" KeyPath="yes" />
       </Component>
     </ComponentGroup>
 
-    <!-- Windows Service registration via WiX ServiceInstall -->
-    <Component Id="AIVService" Directory="INSTALLFOLDER" Guid="D1E2F3A4-B5C6-7890-DEFA-234567890123">
-      <RegistryValue Root="HKLM"
-                     Key="SOFTWARE\AIVHub\AIV"
-                     Name="ServiceInstalled"
-                     Type="integer"
-                     Value="1"
-                     KeyPath="yes" />
+    <!-- Windows Service registration. AIVService.exe is WinSW (see aiv-build-win.ps1),
+         which is what actually implements the SCM control protocol; ServiceInstall's
+         ImagePath is derived from this component's KeyPath File. -->
+    <Component Id="AIVService" Directory="INSTALLBIN" Guid="D1E2F3A4-B5C6-7890-DEFA-234567890123">
+      <File Id="AIVServiceExe" Source="$BuildDir\bin\AIVService.exe" KeyPath="yes" />
+      <File Id="AIVServiceConfig" Source="$BuildDir\bin\AIVService.xml" />
       <ServiceInstall Id="InstallAIVService"
                       Name="AIVService"
                       DisplayName="AIV Application"
@@ -167,7 +196,7 @@ $wxs = @"
                      KeyPath="yes" />
       <Environment Id="AIVPath"
                    Name="PATH"
-                   Value="[INSTALLFOLDER]bin"
+                   Value="[INSTALLBIN]"
                    Permanent="no"
                    Part="last"
                    Action="set"
