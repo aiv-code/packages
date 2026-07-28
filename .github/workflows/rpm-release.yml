@@ -144,6 +144,6 @@ jobs:
           ```
           sudo rpm -U aiv*.rpm
           ```
-
+          For more details, go to [AIV Installation Guide](https://github.com/aiv-code/docker-aiv/blob/main/aiv-installation.md "AIV Installation Guide")
         files: |
           aiv*.rpm

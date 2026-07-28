@@ -116,5 +116,22 @@ jobs:
         body: |
           Debian package release for AIV version ${{ env.VERSION }}-${{ env.RELEASE }}
 
+          - Download aiv latest in https://github.com/aiv-code/docker-aiv/releases
+
+          - Install the AIV package
+          ```
+          sudo dpkg -i aiv_<version>_all.deb
+          ```
+          - Start and enable the AIV service
+          ```bash
+          sudo systemctl enable --now aiv.service
+          ```
+
+          - Update AIV
+          ```
+          sudo dpkg -i aiv_<version>_all.deb
+          ```
+
+          For more details, go to [AIV Installation Guide](https://github.com/aiv-code/docker-aiv/blob/main/aiv-installation.md "AIV Installation Guide")
         files: |
           aiv*.deb
