@@ -8,7 +8,7 @@ Homepage: https://aivhub.com
 
 Package: aiv
 Architecture: all
-Depends: ${misc:Depends}, default-jdk-headless | openjdk-21-jdk-headless | openjdk-17-jdk-headless | openjdk-11-jdk-headless, ca-certificates
+Depends: ${misc:Depends}, ca-certificates
 Description: AIV Spring Application
  Java Spring application for AIV system.
  This package includes the necessary components to run the AIV service.
