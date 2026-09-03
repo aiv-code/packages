@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.aivhub.aiv</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/local/bin/aiv</string>
+  </array>
+
+  <key>UserName</key>
+  <string>_aiv</string>
+
+  <key>WorkingDirectory</key>
+  <string>/usr/local/lib/aiv</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <dict>
+    <key>SuccessfulExit</key>
+    <false/>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>/usr/local/var/log/aiv/aiv.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/usr/local/var/log/aiv/aiv.err.log</string>
+</dict>
+</plist>
