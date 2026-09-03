@@ -3,10 +3,9 @@ name: Release macOS package
 on:
   push:
     branches:
-      - main
-      - macos
+      - aiv7
   repository_dispatch:
-    types: [docker-aiv-release]
+    types: [docker-aiv7-release]
 
 permissions:
   contents: write
@@ -36,7 +35,7 @@ jobs:
       - name: Parse Version from docker-compose.yml
         id: version
         run: |
-          VERSION=$(awk '/image: aivhub\/aiv:/ {print $2}' docker-compose.yml | cut -d':' -f2 | head -n1)
+          VERSION=$(awk '/image: aivhub\/aivlocal:/ {print $2}' docker-compose.yml | cut -d':' -f2 | head -n1)
           if [[ -z "$VERSION" ]]; then
             echo "Error: Could not parse version from docker-compose.yml"
             exit 1
@@ -70,9 +69,9 @@ jobs:
         env:
           VERSION: ${{ env.VERSION }}
         run: |
-          echo "Pulling aivhub/aiv:${VERSION}"
-          docker pull aivhub/aiv:${VERSION}
-          docker create --name aiv_container aivhub/aiv:${VERSION}
+          echo "Pulling aivhub/aivlocal:${VERSION}"
+          docker pull aivhub/aivlocal:${VERSION}
+          docker create --name aiv_container aivhub/aivlocal:${VERSION}
           docker cp aiv_container:/opt/run.jar aiv.jar
           docker rm -f aiv_container
 
