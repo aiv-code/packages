@@ -25,7 +25,7 @@ jobs:
 
       - name: Merge docker-aiv files
         run: |
-          git clone https://github.com/aiv-code/docker-aiv --depth 1
+          git clone https://github.com/aiv-code/docker-aiv --depth 1 --branch aiv-7
           rsync -av --ignore-existing --exclude='.git' docker-aiv/ ./
           rm -rf docker-aiv
 
@@ -94,7 +94,7 @@ jobs:
 
       - name: Merge docker-aiv files
         run: |
-          git clone https://github.com/aiv-code/docker-aiv --depth 1
+          git clone https://github.com/aiv-code/docker-aiv --depth 1 --branch aiv-7
           rsync -av --ignore-existing --exclude='.git' docker-aiv/ ./
           rm -rf docker-aiv
 
