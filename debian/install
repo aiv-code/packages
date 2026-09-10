@@ -5,3 +5,4 @@ repository/Config/* var/lib/aiv/repository/Config/
 repository/images/* var/lib/aiv/repository/images/
 repository/Default/* var/lib/aiv/repository/Default
 debian/bin/aiv usr/bin/
+debian/bin/aiv_universalauth usr/bin/

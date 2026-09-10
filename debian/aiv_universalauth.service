@@ -1,12 +1,12 @@
 [Unit]
-Description=AIV Application
-After=network.target aiv_universalauth.service
+Description=AIV UniversalAuth Application
+After=network.target
 
 [Service]
 User=aiv
 Group=aiv
 Type=simple
-ExecStart=/usr/bin/aiv
+ExecStart=/usr/bin/aiv_universalauth
 WorkingDirectory=/var/lib/aiv
 Restart=on-failure
 RestartSec=10

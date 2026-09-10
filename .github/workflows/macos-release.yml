@@ -3,9 +3,9 @@ name: Release macOS package
 on:
   push:
     branches:
-      - aiv7
+      - main
   repository_dispatch:
-    types: [docker-aiv7-release]
+    types: [docker-aiv-release]
 
 permissions:
   contents: write
