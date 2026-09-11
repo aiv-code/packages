@@ -27,10 +27,10 @@ export security_db_password=postgres
 export aiv_port=8080
 export HOST_IP=localhost
 export AUTH_PORT=8087
-export AIV_PORT=8083
+export AIV_PORT=8080
 export AIV_AI_PORT=8002
 export AUTH_PUBLIC_URL=http://localhost:8087
-export AIV_PUBLIC_URL=http://localhost:8083
+export AIV_PUBLIC_URL=http://localhost:8080
 
 envsubst < ../repository/econfig/application.yml > repository/econfig/application.yml
 sed -i 's,logDir: /var/lib/aiv/logs,logDir: /var/log/aiv,g' repository/econfig/application.yml
@@ -39,7 +39,10 @@ sed -i 's,/opt/logs,/var/log/aiv,g' repository/econfig/logback.xml
 # UniversalAuth
 cp ../universalauth.jar ./
 cp -r ../universalauth universalauth
+export SERVER_PORT=8087
 envsubst < ../universalauth/application.yml > universalauth/application.yml
+sed -i 's,db:5432,localhost:5432,g' universalauth/application.yml
+#sed -i 's,${SERVER_PORT},:8087,g' universalauth/application.yml
 
 # Create debian folder
 mkdir debian
