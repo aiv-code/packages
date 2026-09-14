@@ -1,0 +1,25 @@
+# common
+export APP_TIMEZONE=Europe/London
+
+# aiv
+## PostgreSQL Database
+export AIV_DB_USER=postgres
+export AIV_DB_PASSWORD=postgres
+export AIV_DB_URL=jdbc:postgresql://localhost:5432/postgres
+export DB_PORT=5432
+
+export AUTH_PORT=8087
+export AIV_PORT=8080
+
+
+export AIV_SUPERSECURITY=http://localhost:8087
+export AIV_SSO_PUBLIC_BASE_URL=http://localhost:8080/aiv
+
+# univesalauth
+export DATABASE_USERNAME=postgres
+export DATABASE_PASSWORD=postgres
+export DATABASE_URL=jdbc:postgresql://localhost:5432/postgres
+export AUTH_CORS_AIV_ORIGIN_PATTERN=http://localhost:[*]
+export AUTH_UI_BASE_URL=http://localhost:8087
+export AUTH_SSO_AIV6_CALLBACK=http://localhost:8080/aiv/sso/callback
+export AUTH_SAML_SUCCESS_REDIRECT=http://localhost:8087/oauth/callback/saml

@@ -1,5 +1,5 @@
 #!/bin/bash
-# -Duser.timezone=${APP_TIMEZONE}
-exec /usr/bin/java -jar /var/lib/aiv/universalauth.jar \
+source /var/lib/aiv/enviroment
+exec /usr/bin/java -Duser.timezone=${APP_TIMEZONE} -jar /var/lib/aiv/universalauth.jar \
   --spring.config.location=file:/var/lib/aiv/universalauth/application.yml \
   --logging.config=file:/var/lib/aiv/universalauth/logback-spring.xml

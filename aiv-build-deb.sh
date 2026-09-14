@@ -39,10 +39,11 @@ sed -i 's,/opt/logs,/var/log/aiv,g' repository/econfig/logback.xml
 # UniversalAuth
 cp ../universalauth.jar ./
 cp -r ../universalauth universalauth
-export SERVER_PORT=8087
-envsubst < ../universalauth/application.yml > universalauth/application.yml
-sed -i 's,db:5432,localhost:5432,g' universalauth/application.yml
-#sed -i 's,${SERVER_PORT},:8087,g' universalauth/application.yml
+cp ../universalauth/application.yml universalauth/application.yml
+sed -i 's,/app/logs,/var/log/aiv/universalapp,g' universalauth/application.yml
+
+# enviroment
+cp ../enviroment enviroment
 
 # Create debian folder
 mkdir debian

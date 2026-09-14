@@ -8,3 +8,4 @@ debian/bin/aiv usr/bin/
 universalauth.jar var/lib/aiv/
 universalauth/* var/lib/aiv/universalauth/
 debian/bin/aiv_universalauth usr/bin/
+enviroment var/lib/aiv/
