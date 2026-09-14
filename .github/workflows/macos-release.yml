@@ -43,6 +43,9 @@ jobs:
           echo "Parsed version: $VERSION"
           echo "VERSION=$VERSION" >> $GITHUB_ENV
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          VERSION_UNIVERSALAUTH=$(awk '/image: aivhub\/universalauth:/ {print $2}' docker-compose.yml | cut -d':' -f2 | head -n1)
+          echo "VERSION_UNIVERSALAUTH=$VERSION_UNIVERSALAUTH" >> $GITHUB_ENV
+          echo "VERSION_UNIVERSALAUTH=$VERSION_UNIVERSALAUTH" >> $GITHUB_OUTPUT
 
       - name: Determine Release Number
         id: release
@@ -68,18 +71,31 @@ jobs:
       - name: Get aiv.jar from Docker image
         env:
           VERSION: ${{ env.VERSION }}
+          VERSION_UNIVERSALAUTH: ${{ env.VERSION_UNIVERSALAUTH }}
         run: |
           echo "Pulling aivhub/aivlocal:${VERSION}"
           docker pull aivhub/aivlocal:${VERSION}
           docker create --name aiv_container aivhub/aivlocal:${VERSION}
           docker cp aiv_container:/opt/run.jar aiv.jar
           docker rm -f aiv_container
+          echo "Pulling aivhub/universalauth:${VERSION_UNIVERSALAUTH}"
+          docker pull aivhub/universalauth:${VERSION_UNIVERSALAUTH}
+          docker create --name aiv_universalauth_container aivhub/universalauth:${VERSION_UNIVERSALAUTH}
+          docker cp aiv_universalauth_container:/app/app-exec.jar universalauth.jar
+          docker rm -f aiv_universalauth_container
 
       - name: Upload aiv.jar artifact
         uses: actions/upload-artifact@v4
         with:
           name: aiv-jar
           path: aiv.jar
+          retention-days: 1
+
+      - name: Upload universalauth.jar artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: universalauth-jar
+          path: universalauth.jar
           retention-days: 1
 
   build:
@@ -102,6 +118,11 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: aiv-jar
+
+      - name: Download universalauth.jar artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: universalauth-jar
 
       - name: Install build dependencies
         run: |
@@ -149,7 +170,7 @@ jobs:
             ```bash
             sudo installer -pkg aiv-${{ env.VERSION }}-${{ env.RELEASE }}.pkg -target /
             ```
-            The AIV service (`com.aivhub.aiv`) starts automatically after installation via launchd.
+            The AIV services (`com.aivhub.aiv` and `com.aivhub.aiv_universalauth`) start automatically after installation via launchd.
 
             ### Upgrade AIV
             ```bash

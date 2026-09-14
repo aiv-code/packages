@@ -17,10 +17,12 @@ mkdir -p "${ROOT_DIR}/usr/local/lib/aiv/repository/econfig"
 mkdir -p "${ROOT_DIR}/usr/local/lib/aiv/repository/Config"
 mkdir -p "${ROOT_DIR}/usr/local/lib/aiv/repository/images"
 mkdir -p "${ROOT_DIR}/usr/local/lib/aiv/repository/Default"
+mkdir -p "${ROOT_DIR}/usr/local/lib/aiv/universalauth"
 mkdir -p "${ROOT_DIR}/Library/LaunchDaemons"
 
 # Copy application files
 cp aiv.jar "${ROOT_DIR}/usr/local/lib/aiv/"
+cp enviroment "${ROOT_DIR}/usr/local/lib/aiv/"
 cp -r config/drivers/* "${ROOT_DIR}/usr/local/lib/aiv/config/drivers/"
 cp -r repository/econfig/* "${ROOT_DIR}/usr/local/lib/aiv/repository/econfig/"
 cp -r repository/Config/* "${ROOT_DIR}/usr/local/lib/aiv/repository/Config/"
@@ -28,10 +30,17 @@ cp -r repository/images/* "${ROOT_DIR}/usr/local/lib/aiv/repository/images/"
 cp -r repository/Default/* "${ROOT_DIR}/usr/local/lib/aiv/repository/Default/"
 
 cp macos/bin/aiv "${ROOT_DIR}/usr/local/bin/aiv"
+cp macos/bin/aiv_universalauth "${ROOT_DIR}/usr/local/bin/aiv_universalauth"
 cp macos/bin/aiv-uninstall.sh "${ROOT_DIR}/usr/local/bin/aiv-uninstall.sh"
-chmod 755 "${ROOT_DIR}/usr/local/bin/aiv" "${ROOT_DIR}/usr/local/bin/aiv-uninstall.sh"
+chmod 755 "${ROOT_DIR}/usr/local/bin/aiv" "${ROOT_DIR}/usr/local/bin/aiv_universalauth" "${ROOT_DIR}/usr/local/bin/aiv-uninstall.sh"
 
 cp macos/com.aivhub.aiv.plist "${ROOT_DIR}/Library/LaunchDaemons/com.aivhub.aiv.plist"
+cp macos/com.aivhub.aiv_universalauth.plist "${ROOT_DIR}/Library/LaunchDaemons/com.aivhub.aiv_universalauth.plist"
+
+# UniversalAuth
+cp universalauth.jar "${ROOT_DIR}/usr/local/lib/aiv/"
+cp -r universalauth/* "${ROOT_DIR}/usr/local/lib/aiv/universalauth/"
+sed -i '' 's,/app/logs,/usr/local/var/log/aiv/universalapp,g' "${ROOT_DIR}/usr/local/lib/aiv/universalauth/application.yml"
 
 # Create default configuration with environment variable substitution
 export aiv_base=/usr/local/lib/aiv

@@ -12,6 +12,7 @@ if (-not $Release) { $Release = "0" }
 $ErrorActionPreference = "Stop"
 $BuildDir = "aiv-win-$Version"
 $InstallBase = "C:\AIV"
+$Timezone = "Europe/London"
 
 Write-Host "Building Windows MSI for AIV $Version-$Release"
 
@@ -24,7 +25,9 @@ $dirs = @(
     "$BuildDir\repository\Config",
     "$BuildDir\repository\images",
     "$BuildDir\repository\Default",
-    "$BuildDir\logs"
+    "$BuildDir\universalauth",
+    "$BuildDir\logs",
+    "$BuildDir\logs\universalapp"
 )
 foreach ($d in $dirs) { New-Item -ItemType Directory -Force $d | Out-Null }
 
@@ -36,6 +39,13 @@ Copy-Item -Recurse repository\Config\*    "$BuildDir\repository\Config\"
 Copy-Item -Recurse repository\images\*    "$BuildDir\repository\images\"
 Copy-Item -Recurse repository\Default\*   "$BuildDir\repository\Default\"
 
+# ── UniversalAuth ──────────────────────────────────────────────────────────────
+Copy-Item universalauth.jar                "$BuildDir\"
+Copy-Item -Recurse universalauth\*        "$BuildDir\universalauth\"
+(Get-Content "$BuildDir\universalauth\application.yml" -Raw) `
+    -replace "/app/logs", "$InstallBase\\logs\\universalapp" |
+    Set-Content "$BuildDir\universalauth\application.yml"
+
 # ── Shared java invocation args (used by both aiv.bat and the WinSW service config) ────
 $JavaArgs = @(
     "--add-opens=java.base/java.nio=ALL-UNNAMED"
@@ -43,9 +53,20 @@ $JavaArgs = @(
     "--add-opens=java.base/sun.nio.ch=ALL-UNNAMED"
     "--add-opens=java.base/sun.util.calendar=ALL-UNNAMED"
     "-Dspring.config.location=$InstallBase\repository\econfig\application.yml"
+    "-Dlogging.config=$InstallBase\repository\econfig\logback.xml"
     "-Dloader.path=$InstallBase\config\drivers"
+    "-Duser.timezone=$Timezone"
+    "-Dspark.io.mode.default=NIO"
     "-cp `"$InstallBase\repository\econfig\;$InstallBase\aiv.jar`""
     "org.springframework.boot.loader.launch.PropertiesLauncher"
+) -join " "
+
+# ── UniversalAuth java invocation args (used by both the .bat and the WinSW config) ────
+$UniversalAuthJavaArgs = @(
+    "-Duser.timezone=$Timezone"
+    "-jar `"$InstallBase\universalauth.jar`""
+    "--spring.config.location=file:$InstallBase\universalauth\application.yml"
+    "--logging.config=file:$InstallBase\universalauth\logback-spring.xml"
 ) -join " "
 
 # ── aiv.bat launcher (interactive/manual use) ──────────────────────────────────
@@ -70,7 +91,18 @@ if %JAVA_MAJOR% LSS 17 (
 java $JavaArgs
 "@ | Set-Content "$BuildDir\bin\aiv.bat"
 
-# ── AIVService.exe (WinSW) ──────────────────────────────────────────────────────
+# ── aiv_universalauth.bat launcher (interactive/manual use) ────────────────────
+@"
+@echo off
+where java >nul 2>nul
+if errorlevel 1 (
+    echo ERROR: Java was not found on PATH. Please install Java 17 or later before running AIV.
+    exit /b 1
+)
+java $UniversalAuthJavaArgs
+"@ | Set-Content "$BuildDir\bin\aiv_universalauth.bat"
+
+# ── AIVService.exe / AIVUniversalAuthService.exe (WinSW) ────────────────────────
 # The Windows Service Control Manager requires a service binary that implements the
 # SCM control protocol (StartServiceCtrlDispatcher); a bare java.exe/aiv.bat process
 # does not, so it can never be registered directly as an ownProcess service. WinSW is
@@ -78,6 +110,7 @@ java $JavaArgs
 # described by the paired <name>.xml config placed next to it.
 $WinswUrl = "https://github.com/winsw/winsw/releases/download/v2.12.0/WinSW-x64.exe"
 Invoke-WebRequest -Uri $WinswUrl -OutFile "$BuildDir\bin\AIVService.exe"
+Copy-Item "$BuildDir\bin\AIVService.exe" "$BuildDir\bin\AIVUniversalAuthService.exe"
 
 @"
 <service>
@@ -93,6 +126,21 @@ Invoke-WebRequest -Uri $WinswUrl -OutFile "$BuildDir\bin\AIVService.exe"
   <onfailure action="restart" delay="10 sec" />
 </service>
 "@ | Set-Content "$BuildDir\bin\AIVService.xml"
+
+@"
+<service>
+  <id>AIVUniversalAuthService</id>
+  <name>AIV UniversalAuth Application</name>
+  <description>AIV UniversalAuth Application Service</description>
+  <executable>java</executable>
+  <arguments>$UniversalAuthJavaArgs</arguments>
+  <workingdirectory>$InstallBase</workingdirectory>
+  <log mode="roll-by-size">
+    <logpath>$InstallBase\logs\universalapp</logpath>
+  </log>
+  <onfailure action="restart" delay="10 sec" />
+</service>
+"@ | Set-Content "$BuildDir\bin\AIVUniversalAuthService.xml"
 
 # ── Substitute config defaults ────────────────────────────────────────────────
 $env:aiv_base            = $InstallBase
@@ -144,6 +192,7 @@ $wxs = @"
     <Feature Id="MainFeature" Title="AIV Application" Level="1">
       <ComponentGroupRef Id="AIVFiles" />
       <ComponentRef Id="AIVService" />
+      <ComponentRef Id="AIVUniversalAuthService" />
       <ComponentRef Id="AIVEnvPath" />
     </Feature>
 
@@ -161,6 +210,12 @@ $wxs = @"
       </Component>
       <Component Id="AivBat" Directory="INSTALLBIN" Guid="*">
         <File Source="$BuildDir\bin\aiv.bat" KeyPath="yes" />
+      </Component>
+      <Component Id="UniversalAuthJar" Guid="*">
+        <File Source="$BuildDir\universalauth.jar" KeyPath="yes" />
+      </Component>
+      <Component Id="AivUniversalAuthBat" Directory="INSTALLBIN" Guid="*">
+        <File Source="$BuildDir\bin\aiv_universalauth.bat" KeyPath="yes" />
       </Component>
     </ComponentGroup>
 
@@ -180,6 +235,26 @@ $wxs = @"
                       Account="LocalSystem" />
       <ServiceControl Id="StartAIVService"
                       Name="AIVService"
+                      Start="install"
+                      Stop="both"
+                      Remove="uninstall"
+                      Wait="yes" />
+    </Component>
+
+    <!-- Same WinSW wrapper pattern as AIVService, driving the UniversalAuth jar instead. -->
+    <Component Id="AIVUniversalAuthService" Directory="INSTALLBIN" Guid="E2F3A4B5-C6D7-8901-EFAB-345678901234">
+      <File Id="AIVUniversalAuthServiceExe" Source="$BuildDir\bin\AIVUniversalAuthService.exe" KeyPath="yes" />
+      <File Id="AIVUniversalAuthServiceConfig" Source="$BuildDir\bin\AIVUniversalAuthService.xml" />
+      <ServiceInstall Id="InstallAIVUniversalAuthService"
+                      Name="AIVUniversalAuthService"
+                      DisplayName="AIV UniversalAuth Application"
+                      Description="AIV UniversalAuth Application Service"
+                      Start="auto"
+                      Type="ownProcess"
+                      ErrorControl="normal"
+                      Account="LocalSystem" />
+      <ServiceControl Id="StartAIVUniversalAuthService"
+                      Name="AIVUniversalAuthService"
                       Start="install"
                       Stop="both"
                       Remove="uninstall"

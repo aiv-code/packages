@@ -1,4 +1,5 @@
 #!/bin/bash
+source /usr/local/lib/aiv/enviroment
 # Resolve a JDK via java_home (works whether Java was installed via the
 # official pkg, Homebrew, or Adoptium — none of which reliably symlink
 # into /usr/bin/java on macOS).
@@ -12,6 +13,9 @@ exec "$JAVA_BIN" --add-opens=java.base/java.nio=ALL-UNNAMED \
      --add-opens=java.base/sun.nio.ch=ALL-UNNAMED \
      --add-opens=java.base/sun.util.calendar=ALL-UNNAMED \
      -Dspring.config.location=/usr/local/lib/aiv/repository/econfig/application.yml \
+     -Dlogging.config=/usr/local/lib/aiv/repository/econfig/logback.xml \
      -Dloader.path=/usr/local/lib/aiv/config/drivers \
+     -Duser.timezone=${APP_TIMEZONE} \
+     -Dspark.io.mode.default=NIO \
      -cp /usr/local/lib/aiv/repository/econfig/:/usr/local/lib/aiv/aiv.jar \
      org.springframework.boot.loader.launch.PropertiesLauncher

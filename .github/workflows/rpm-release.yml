@@ -43,6 +43,9 @@ jobs:
         echo "Parsed version: $VERSION"
         echo "VERSION=$VERSION" >> $GITHUB_ENV
         echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+        VERSION_UNIVERSALAUTH=$(cat docker-compose.yml | awk /'image: aivhub\/universalauth:/ {print $2}' | cut -d':' -f2 | head -n1)
+        echo "VERSION_UNIVERSALAUTH=$VERSION_UNIVERSALAUTH" >> $GITHUB_ENV
+        echo "VERSION_UNIVERSALAUTH=$VERSION_UNIVERSALAUTH" >> $GITHUB_OUTPUT
 
     - name: Determine Release Number
       id: release
@@ -69,12 +72,18 @@ jobs:
     - name: Get run.jar from Docker image
       env:
         VERSION: ${{ env.VERSION }}
+        VERSION_UNIVERSALAUTH: ${{ env.VERSION_UNIVERSALAUTH }}
       run: |
         echo "Using image version: $VERSION"
         docker pull aivhub/aivlocal:${VERSION}
         docker create --name aiv_container aivhub/aivlocal:${VERSION}
         docker cp aiv_container:/opt/run.jar aiv.jar
         docker rm -f aiv_container
+        echo "Get aivhub/universalauth: $VERSION_UNIVERSALAUTH"
+        docker pull aivhub/universalauth:$VERSION_UNIVERSALAUTH
+        docker create --name aiv_universalauth_container aivhub/universalauth:$VERSION_UNIVERSALAUTH
+        docker cp aiv_universalauth_container:/app/app-exec.jar universalauth.jar
+        docker rm -f aiv_universalauth_container
 
     - name: Build RPM package
       env:

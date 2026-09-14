@@ -18,18 +18,25 @@ cd aiv-${VERSION}
 
 # Create application directory structure
 mkdir -p usr/bin
-mkdir -p var/lib/aiv/{config/drivers,repository/{econfig,Config,images,Default}}
-mkdir -p var/log/aiv
+mkdir -p var/lib/aiv/{config/drivers,repository/{econfig,Config,images,Default},universalauth}
+mkdir -p var/log/aiv/universalapp
 mkdir -p etc/systemd/system
 
 # Copy necessary application files
 cp ../debian/bin/aiv usr/bin/
+cp ../debian/bin/aiv_universalauth usr/bin/
 cp ../aiv.jar var/lib/aiv/
+cp ../enviroment var/lib/aiv/
 cp -r ../config/drivers/* var/lib/aiv/config/drivers/
 cp -r ../repository/econfig/* var/lib/aiv/repository/econfig/
 cp -r ../repository/Config/* var/lib/aiv/repository/Config/
 cp -r ../repository/images/* var/lib/aiv/repository/images/
 cp -r ../repository/Default/* var/lib/aiv/repository/Default/
+
+# UniversalAuth
+cp ../universalauth.jar var/lib/aiv/
+cp -r ../universalauth/* var/lib/aiv/universalauth/
+sed -i 's,/app/logs,/var/log/aiv/universalapp,g' var/lib/aiv/universalauth/application.yml
 
 # Create default configuration with environment variable substitution
 export aiv_base=/var/lib/aiv
@@ -46,11 +53,11 @@ envsubst < ../repository/econfig/application.yml > var/lib/aiv/repository/econfi
 sed -i 's,logDir: /var/lib/aiv/logs,logDir: /var/log/aiv,g' var/lib/aiv/repository/econfig/application.yml
 sed -i 's,/opt/logs,/var/log/aiv,g' var/lib/aiv/repository/econfig/logback.xml
 
-# Create systemd service file
+# Create systemd service files
 cat > etc/systemd/system/aiv.service << 'EOF'
 [Unit]
 Description=AIV Application Service
-After=network.target
+After=network.target aiv_universalauth.service
 
 [Service]
 Type=simple
@@ -65,6 +72,26 @@ StandardError=journal
 
 # Environment variables
 Environment=JAVA_OPTS="-Xmx2g -Xms512m"
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+cat > etc/systemd/system/aiv_universalauth.service << 'EOF'
+[Unit]
+Description=AIV UniversalAuth Application
+After=network.target
+
+[Service]
+Type=simple
+User=aiv
+Group=aiv
+ExecStart=/usr/bin/aiv_universalauth
+WorkingDirectory=/var/lib/aiv
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
@@ -103,59 +130,70 @@ rm -rf %{buildroot}
 # Create directory structure
 mkdir -p %{buildroot}/usr/bin
 mkdir -p %{buildroot}/var/lib/aiv
-mkdir -p %{buildroot}/var/log/aiv
+mkdir -p %{buildroot}/var/log/aiv/universalapp
 mkdir -p %{buildroot}/etc/systemd/system
 
 # Copy application files
 cp usr/bin/aiv %{buildroot}/usr/bin/
+cp usr/bin/aiv_universalauth %{buildroot}/usr/bin/
 cp -r var/lib/aiv/* %{buildroot}/var/lib/aiv/
 cp etc/systemd/system/aiv.service %{buildroot}/etc/systemd/system/
+cp etc/systemd/system/aiv_universalauth.service %{buildroot}/etc/systemd/system/
 
 %files
 %defattr(-,root,root,-)
 /usr/bin/aiv
+/usr/bin/aiv_universalauth
 /var/lib/aiv/
 /etc/systemd/system/aiv.service
+/etc/systemd/system/aiv_universalauth.service
 %attr(755,aiv,aiv) /var/lib/aiv
 %attr(755,aiv,aiv) /var/log/aiv
 
 %config(noreplace) /var/lib/aiv/repository/*
+%config(noreplace) /var/lib/aiv/universalauth/application.yml
+%config(noreplace) /var/lib/aiv/enviroment
 
 %pre
 # Create aiv user and group if they don't exist
 getent group aiv >/dev/null || groupadd -r aiv
 getent passwd aiv >/dev/null || useradd -r -g aiv -d /var/lib/aiv -s /bin/false aiv
 
-# Stop AIV service before upgrade
+# Stop AIV services before upgrade
 if [ \$1 -gt 1 ]; then
     # This is an upgrade
     systemctl stop aiv.service 2>/dev/null || true
+    systemctl stop aiv_universalauth.service 2>/dev/null || true
 fi
 
 %post
-# Reload systemd and enable service
+# Reload systemd and enable services
 systemctl daemon-reload
+systemctl enable aiv_universalauth.service
 systemctl enable aiv.service
 
 # Set proper ownership
 chown -R aiv:aiv /var/lib/aiv
 chown -R aiv:aiv /var/log/aiv
 
-# Start AIV service after installation/upgrade
+# Start AIV services after installation/upgrade
 if [ \$1 -eq 1 ]; then
     # Fresh installation
-    echo "AIV installed successfully. Start service with: systemctl start aiv.service"
+    echo "AIV installed successfully. Start services with: systemctl start aiv_universalauth.service aiv.service"
 elif [ \$1 -gt 1 ]; then
-    # Upgrade - restart the service
+    # Upgrade - restart the services
+    systemctl start aiv_universalauth.service
     systemctl start aiv.service
-    echo "AIV upgraded successfully and service restarted"
+    echo "AIV upgraded successfully and services restarted"
 fi
 
 %preun
-# Stop and disable service before removal
+# Stop and disable services before removal
 if [ \$1 -eq 0 ]; then
     systemctl stop aiv.service
     systemctl disable aiv.service
+    systemctl stop aiv_universalauth.service
+    systemctl disable aiv_universalauth.service
 fi
 
 %postun

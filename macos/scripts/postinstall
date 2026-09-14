@@ -18,9 +18,16 @@ if ! dscl . -read /Users/_aiv >/dev/null 2>&1; then
   dscl . -create /Users/_aiv IsHidden 1
 fi
 
-mkdir -p /usr/local/var/log/aiv
+mkdir -p /usr/local/var/log/aiv/universalapp
 chown -R _aiv:staff /usr/local/lib/aiv /usr/local/var/log/aiv
-chmod 755 /usr/local/bin/aiv /usr/local/bin/aiv-uninstall.sh
+chmod 755 /usr/local/bin/aiv /usr/local/bin/aiv_universalauth /usr/local/bin/aiv-uninstall.sh
+
+# UniversalAuth is loaded first so AIV's SSO callback has somewhere to reach.
+UNIVERSALAUTH_PLIST=/Library/LaunchDaemons/com.aivhub.aiv_universalauth.plist
+chown root:wheel "$UNIVERSALAUTH_PLIST"
+chmod 644 "$UNIVERSALAUTH_PLIST"
+launchctl bootout system "$UNIVERSALAUTH_PLIST" 2>/dev/null || launchctl unload -w "$UNIVERSALAUTH_PLIST" 2>/dev/null || true
+launchctl bootstrap system "$UNIVERSALAUTH_PLIST" 2>/dev/null || launchctl load -w "$UNIVERSALAUTH_PLIST"
 
 PLIST=/Library/LaunchDaemons/com.aivhub.aiv.plist
 chown root:wheel "$PLIST"
