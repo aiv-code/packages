@@ -36,7 +36,7 @@ jobs:
       - name: Parse Version from docker-compose.yml
         id: version
         run: |
-          VERSION=$(awk '/image: aivhub\/aivlocal:/ {print $2}' docker-compose.yml | cut -d':' -f2 | head -n1)
+          VERSION=$(awk '/image: aivhub\/aiv:/ {print $2}' docker-compose.yml | cut -d':' -f2 | head -n1)
           if [[ -z "$VERSION" ]]; then
             echo "Error: Could not parse version from docker-compose.yml"
             exit 1
@@ -73,9 +73,9 @@ jobs:
           VERSION: ${{ env.VERSION }}
           VERSION_UNIVERSALAUTH: ${{ env.VERSION_UNIVERSALAUTH }}
         run: |
-          echo "Pulling aivhub/aivlocal:${VERSION}"
-          docker pull aivhub/aivlocal:${VERSION}
-          docker create --name aiv_container aivhub/aivlocal:${VERSION}
+          echo "Pulling aivhub/aiv:${VERSION}"
+          docker pull aivhub/aiv:${VERSION}
+          docker create --name aiv_container aivhub/aiv:${VERSION}
           docker cp aiv_container:/opt/run.jar aiv.jar
           docker rm -f aiv_container
           echo "Pulling aivhub/universalauth:${VERSION_UNIVERSALAUTH}"

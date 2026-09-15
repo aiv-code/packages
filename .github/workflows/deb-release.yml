@@ -34,7 +34,7 @@ jobs:
     - name: Parse Version from docker-compose.yml
       id: version
       run: |
-        # Extract the latest version from the docker-compose line "image: aivhub/aivlocal:6.3.8"
+        # Extract the latest version from the docker-compose line "image: aivhub/aiv:6.3.8"
         VERSION=$(cat docker-compose.yml | awk /'image: aivhub\/aiv:/ {print $2}' | cut -d':' -f2 | head -n1)
         if [[ -z "$VERSION" ]]; then
           echo "Error: Could not parse version from docker-compose.yml"
