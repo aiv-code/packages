@@ -5,7 +5,7 @@ exec /usr/bin/java --add-opens=java.base/java.nio=ALL-UNNAMED \
      --add-opens=java.base/sun.nio.ch=ALL-UNNAMED \
      --add-opens=java.base/sun.util.calendar=ALL-UNNAMED \
      -Dspring.config.location=/var/lib/aiv/repository/econfig/application.yml \
-     -Dlogging.config=/var/lib/aiv/repository/econfig/logback.xml \
+     -Dlogging.config=/var/lib/aiv/repository/econfig/logback-spring.xml \
      -Dloader.path=/var/lib/aiv/config/drivers \
      -Duser.timezone=${APP_TIMEZONE} \
      -Dspark.io.mode.default=NIO \
